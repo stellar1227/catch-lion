@@ -123,17 +123,48 @@ parcelRequire = (function (modules, cache, entry, globalName) {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.Board = exports.Cell = void 0;
+exports.DeadZone = exports.Board = exports.Cell = void 0;
 
 var Cell =
 /** @class */
 function () {
-  function Cell(position) {
+  function Cell(position, piece) {
     this.position = position;
+    this.piece = piece;
     this.isActive = false; //선택된 셀에 관하여 속성이 있어야한다. 
 
-    this._el = document.createElement('DIV'); //셀이 실제로 엘레멘트로서 그려져야 하므로 만들고, 내부에서만 쓸 수 있게 하고, 외부에서  쓸 수없게 만들다.
+    this._el = document.createElement('DIV'); //셀이 실제로 엘레멘트로서 그려져야 하므로 만들고, 내부에서만 쓸 수 있게 하고, 외부에서  오버라이딩 할 수 없게.
+
+    this._el.classList.add('cell');
   }
+
+  Cell.prototype.put = function (piece) {
+    this.piece = piece; // Q : 이것은 말을  밀어넣는 행위 근데 this.piece는 왜 여기서 선언햇을까..  A : 아 컨스트럭터에서 접근제한자와 형 선언을 해버리면 할당이 자동으로 된다는것. 그러면  put은 이미 생성된 this.piece가 있기 때문에 그렇구나. 
+  };
+
+  Cell.prototype.getPiece = function () {
+    return this.piece;
+  };
+
+  Cell.prototype.active = function () {
+    this.isActive = true;
+  };
+
+  Cell.prototype.deactive = function () {
+    this.isActive = false;
+  };
+
+  Cell.prototype.render = function () {
+    if (this.isActive) {
+      //상태에 따라 클래스 붙여주고.
+      this._el.classList.add('active');
+    } else {
+      this._el.classList.remove('active');
+    } // 말이 있으면 그려주자. 
+
+
+    this._el.innerHTML = this.piece ? this.piece.render() : '';
+  };
 
   return Cell;
 }();
@@ -145,12 +176,81 @@ var Board =
 function () {
   function Board() {
     this.cells = []; //기본적으로 빈 배열을 갖고, cells란 아이는 Cell이라는 클래스로 이루어진 배열일 것이다.
+
+    this._el = document.createElement('DIV');
+    this._el.className = 'board'; // Q: 여기는 왜 클래스 네임으로 쓴걸까? 애드안하고? 그냥 단순 방식을 여러개 보여주려는거였나.
+
+    for (var row = 0; row < 4; row++) {
+      //단순 DOM row 그리기
+      var rowEl = document.createElement('DIV');
+      rowEl.className = 'row'; // Q : 여기도 왜 classList.add가 아니지. 여기도 마찬가지?
+
+      this._el.appendChild(rowEl); //데이터를 가지고 있는 cell을 DOM으로 그리기
+
+
+      for (var col = 0; col < 3; col++) {
+        var cell = new Cell({
+          row: row,
+          col: col
+        }, null); //cell로 인스턴스를 생성한다. row와 col을 담아줌으로서 좌표정보를 전달하고, 새 cell이므로 일단 null을 넣는다(piece 없음)
+
+        this.cells.push(cell); //셀들의 집합에 정보를 넣고.
+
+        rowEl.appendChild(cell._el); //row의 DOM안에 끼워넣는다. 그런데 cell._el을 넣는거니까. cell._el은 밖에서 접근이 가능한가보지?! 
+      }
+    }
   }
+
+  Board.prototype.render = function () {
+    this.cells.forEach(function (v) {
+      return v.render();
+    }); //cell들의 render를 호출해본다. 그래야 그리니까. 
+  };
 
   return Board;
 }();
 
 exports.Board = Board;
+
+var DeadZone =
+/** @class */
+function () {
+  function DeadZone(type) {
+    this.type = type;
+    this.cells = [];
+    this.deadzoneEl = document.getElementById(this.type + "_deadZone").querySelector('.card-body');
+
+    for (var col = 0; col < 4; col++) {
+      var cell = new Cell({
+        col: col,
+        row: 0
+      }, null); //여기서의 cell은 데드존의 1칸을 의미한다. piece가 들어있지 않기 때문에  null을 주며, 로우는 1개뿐이라 0을 넣어준다. 
+
+      this.cells.push(cell);
+      this.deadzoneEl.appendChild(cell._el);
+    }
+  }
+
+  DeadZone.prototype.put = function (piece) {
+    var emptyCell = this.cells.find(function (v) {
+      return v.getPiece() === null;
+    }); //cells집합에서 getPiece했을 때 null것을 찾아(제일 앞의꺼)
+
+    emptyCell.put(piece); //거기에 죽은 말을 넣어주고,  
+
+    emptyCell.render(); //그리고 셀에 피스를 그려준다. 
+  };
+
+  DeadZone.prototype.render = function () {
+    this.cells.forEach(function (v) {
+      return v.render();
+    }); //그리고 셀을 렌더링한다. 
+  };
+
+  return DeadZone;
+}();
+
+exports.DeadZone = DeadZone;
 },{}],"src/Game.ts":[function(require,module,exports) {
 "use strict";
 
@@ -164,10 +264,17 @@ var Board_1 = require("./Board");
 var Game =
 /** @class */
 function () {
-  //Typescript는 readonly 키워드를 사용할 수 있다. readonly가 선언된 클래스 프로퍼티는 선언 시 또는 생성자 내부에서만 값을 할당할 수 있다. 그 외의 경우에는 값을 할당할 수 없고 오직 읽기만 가능한 상태가 된다. 이를 이용하여 상수의 선언에 사용한다.
   function Game() {
     this.board = new Board_1.Board(); //선언한 것을 수정할 수 없도록 readonly 키워드 사용 
-    //const board = new Board()
+    //Typescript는 readonly 키워드를 사용할 수 있다. readonly가 선언된 클래스 프로퍼티는 선언 시 또는 생성자 내부에서만 값을 할당할 수 있다. 그 외의 경우에는 값을 할당할 수 없고 오직 읽기만 가능한 상태가 된다. 이를 이용하여 상수의 선언에 사용한다.
+
+    this.upperDeadZone = new Board_1.DeadZone('upper'); //deadzone을 구성한다. Q : 근데 왜 컨스트럭터에서 구성하지 않았지? 'ㅅ')? 아 리드온리 쓰려고 그런거였지 참
+
+    this.lowerDeadZone = new Board_1.DeadZone('lower'); //const board = new Board()
+
+    var boardContainer = document.querySelector('.board-container');
+    boardContainer.firstChild.remove();
+    boardContainer.appendChild(this.board._el); //board가 들어갈 자리에 el을 넣는다. 
   }
 
   return Game;
@@ -298,7 +405,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "57187" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "58605" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
