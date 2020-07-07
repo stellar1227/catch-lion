@@ -1,4 +1,5 @@
 import { Piece } from './Piece';
+import { Player } from './Player';
 export interface Position { //이게 인터페이스인 이유는 행위와 가지고 있는 속성에 대한 정의이기 때문이다. 
     row : number;
     col : number;
@@ -43,8 +44,13 @@ export class Cell { // 셀이 클래스인 이유는 여러개를 생성해야 �
 export class Board { //보드는 셀들의 집합이니까 셀들이 존재해야해요
     cells : Cell[] = []; //기본적으로 빈 배열을 갖고, cells란 아이는 Cell이라는 클래스로 이루어진 배열일 것이다.
     _el : HTMLElement = document.createElement('DIV');
+    map : WeakMap<HTMLElement, Cell> = new WeakMap(); 
+    /*ES6의 위크맵을 이용 왜 보드에 들고있냐면, 우리가 필요한것은 셀 정보가 아니라  piece의 엘리먼트라서?! 맵의 장점 => 키를 객체로 줄수있잖아여 키는 htmlel이됨 
+    제네릭으로 만드는 이유는? 
+    위크맵이기 때문에 htmlel이 사라지면 cell도 빠이빠이
+    */
 
-    constructor(){
+    constructor(upperPlayer : Player, lowerPlayer : Player){
         this._el.className = 'board'; // Q: 여기는 왜 클래스 네임으로 쓴걸까? 애드안하고? 그냥 단순 방식을 여러개 보여주려는거였나.
         
         for(let row = 0; row < 4; row++){
@@ -54,7 +60,14 @@ export class Board { //보드는 셀들의 집합이니까 셀들이 존재해�
             this._el.appendChild(rowEl);
             //데이터를 가지고 있는 cell을 DOM으로 그리기
             for(let col = 0; col < 3; col++){
-                const cell = new Cell({ row, col }, null); //cell로 인스턴스를 생성한다. row와 col을 담아줌으로서 좌표정보를 전달하고, 새 cell이므로 일단 null을 넣는다(piece 없음)
+                //지금 cell의 좌표와 일치하는 정보를 가진 piece를 찾아서 넣어줌 
+                const piece = upperPlayer.getPieces().find( ({ currentPosition }) => {
+                    return currentPosition.col === col && currentPosition.row === row
+                }) || lowerPlayer.getPieces().find( ({ currentPosition }) => {
+                    return currentPosition.col === col && currentPosition.row === row
+                }) 
+                const cell = new Cell({ row, col }, piece); //cell로 인스턴스를 생성한다. row와 col을 담아줌으로서 좌표정보를 전달하고, 새 cell이므로 일단 null을 넣는다(piece 없음) => 이후 piece 넣는다.
+                this.map.set(cell._el, cell); //만들어 둔 위크맵에 셋팅을 해준다. 
                 this.cells.push(cell); //셀들의 집합에 정보를 넣고.
                 rowEl.appendChild(cell._el); //row의 DOM안에 끼워넣는다. 그런데 cell._el을 넣는거니까. cell._el은 밖에서 접근이 가능한가보지?! 
             }
@@ -69,10 +82,10 @@ export class Board { //보드는 셀들의 집합이니까 셀들이 존재해�
 export class DeadZone { //죽은 말들 모아놓는 곳 
     private cells : Cell[] = [];
     readonly deadzoneEl = document
-    .getElementById(`${this.type}_deadZone`)
+    .getElementById(`${this.type}_deadzone`)
     .querySelector('.card-body');
 
-    constructor(public type : 'upper' | 'lower'){ //4개 이상 잡아먹을 수 없어
+    constructor(public type : 'upper' | 'lower'){ //4개 이상 잡아먹을 수 없어 Q: 아 여기도 열거형으로 가능한가? 이 타입은 왜 리드온리가 아닐까? 
         for(let col = 0; col < 4; col++){
             const cell = new Cell({col, row :0}, null); //여기서의 cell은 데드존의 1칸을 의미한다. piece가 들어있지 않기 때문에  null을 주며, 로우는 1개뿐이라 0을 넣어준다. 
             this.cells.push(cell);
